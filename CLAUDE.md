@@ -5,51 +5,57 @@
 
 ## Project Overview
 
-**claude_riskmanager** is a risk management application. The project is currently in its initial setup phase with no source code committed yet.
+**claude_riskmanager** is a collection of multiple mini projects, each containing its own Python code to perform financial analysis and risk management tasks. Each mini project is self-contained with its own scripts, data, and dependencies.
 
-This document should be updated as the project evolves to reflect the actual codebase structure, conventions, and workflows.
+## Repository Structure
 
-## Repository Status
-
-This repository is newly initialized. As the project takes shape, update the sections below with accurate details.
-
-## Directory Structure
+This is a **multi-project monorepo**. Each top-level directory (other than shared config files) represents an independent mini project focused on a specific financial analysis topic.
 
 ```
 claude_riskmanager/
-├── CLAUDE.md          # AI assistant guide (this file)
-└── .git/              # Git repository metadata
+├── CLAUDE.md              # AI assistant guide (this file)
+├── <mini-project-A>/      # Self-contained financial analysis project
+│   ├── *.py               # Python scripts for this analysis
+│   ├── data/              # Input data (if any)
+│   └── README.md          # Project-specific documentation (if any)
+├── <mini-project-B>/      # Another self-contained project
+│   └── ...
+└── ...
 ```
 
-<!-- As the project grows, update this tree to reflect the actual layout. Example:
-├── src/               # Application source code
-├── tests/             # Test suite
-├── docs/              # Documentation
-├── config/            # Configuration files
-├── scripts/           # Build/deploy scripts
-└── ...
--->
+> **When adding a new mini project**, create a new top-level directory with a descriptive name and keep all related code, data, and documentation within it.
 
 ## Getting Started
-
-<!-- Fill in once the project has a build system, dependencies, and setup instructions. -->
 
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd claude_riskmanager
 
-# Install dependencies
-# TODO: Add dependency installation commands
+# Each mini project may have its own dependencies.
+# Navigate into the specific project directory and install as needed:
+cd <mini-project>
+pip install -r requirements.txt   # if a requirements.txt exists
 
-# Run the application
-# TODO: Add run commands
-
-# Run tests
-# TODO: Add test commands
+# Run a mini project's script directly:
+python <script>.py
 ```
 
+### Python Environment
+
+- Language: **Python 3**
+- Each mini project may specify its own dependencies via `requirements.txt` or inline comments
+- Common financial analysis libraries to expect: `numpy`, `pandas`, `scipy`, `matplotlib`, `yfinance`, `statsmodels`, `scikit-learn`
+
 ## Development Workflow
+
+### Adding a New Mini Project
+
+1. Create a new top-level directory with a clear, descriptive name (e.g., `var_calculation/`, `portfolio_optimization/`)
+2. Add Python scripts within that directory
+3. Include a `requirements.txt` if the project has dependencies beyond the Python standard library
+4. Optionally add a `README.md` explaining the project's purpose and usage
+5. Update this CLAUDE.md if the project introduces new conventions
 
 ### Branching Strategy
 
@@ -60,60 +66,24 @@ cd claude_riskmanager
 
 - Write clear, descriptive commit messages
 - Focus on the "why" rather than the "what"
+- When a commit touches a specific mini project, name it in the commit message
 
-### Code Style & Linting
+### Code Style
 
-<!-- Update with actual linting/formatting tools and commands once configured. -->
-
-- TODO: Document code style standards
-- TODO: Document linting commands
-
-### Testing
-
-<!-- Update with actual test framework and commands once configured. -->
-
-- TODO: Document test framework
-- TODO: Document how to run tests
-- TODO: Document test coverage requirements
-
-## Architecture
-
-<!-- Update this section as the application architecture is defined. -->
-
-### Key Components
-
-- TODO: List major modules/components and their responsibilities
-
-### Data Layer
-
-- TODO: Document database or data storage approach
-
-### API / Interface
-
-- TODO: Document API structure or user interface
-
-## Configuration
-
-<!-- Document environment variables, config files, and secrets management. -->
-
-- TODO: List required environment variables
-- TODO: Document configuration files
-
-## CI/CD
-
-<!-- Document continuous integration and deployment pipelines once set up. -->
-
-- TODO: Document CI/CD pipeline
-- TODO: Document deployment process
+- Follow PEP 8 conventions for Python code
+- Use descriptive variable and function names relevant to the financial domain
+- Include docstrings for non-trivial functions explaining the financial logic
 
 ## Key Conventions for AI Assistants
 
 When working in this repository, follow these guidelines:
 
-1. **Read before writing** — Always read existing files before modifying them
-2. **Keep changes minimal** — Only make changes directly related to the task at hand
-3. **Follow existing patterns** — Match the style and conventions already present in the codebase
-4. **Run tests** — Verify changes don't break existing functionality before committing
-5. **Update this file** — When adding significant new structure, dependencies, or workflows, update CLAUDE.md to reflect the changes
-6. **No over-engineering** — Prefer simple, direct solutions over abstractions for hypothetical future needs
-7. **Security first** — Never commit secrets, credentials, or sensitive data; validate inputs at system boundaries
+1. **Respect project boundaries** — Each mini project is independent; avoid cross-project imports or shared code unless explicitly requested
+2. **Read before writing** — Always read existing files before modifying them
+3. **Keep changes minimal** — Only make changes directly related to the task at hand
+4. **Follow existing patterns** — Match the style and conventions already present in the codebase
+5. **Run scripts to verify** — After making changes, run the relevant Python scripts to confirm they work
+6. **Update this file** — When adding a new mini project or significant new structure, update CLAUDE.md to reflect the changes
+7. **No over-engineering** — Each mini project should be simple and focused on its specific financial analysis task
+8. **Security first** — Never commit secrets, API keys, credentials, or sensitive financial data; use environment variables or config files excluded via `.gitignore`
+9. **Scope awareness** — When asked to work on a specific mini project, stay within that directory; don't modify unrelated projects
