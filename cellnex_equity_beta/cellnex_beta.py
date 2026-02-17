@@ -56,7 +56,7 @@ RETURN_HORIZONS = {
 }
 
 # Half-lives for exponential weighting (in years)
-HALF_LIVES_YEARS = [1, 2, 5]
+HALF_LIVES_YEARS = [1, 2, 5, 8]
 
 
 # =============================================================================
@@ -338,6 +338,7 @@ def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
         "EW (HL = 1Y)",
         "EW (HL = 2Y)",
         "EW (HL = 5Y)",
+        "EW (HL = 8Y)",
     ]
     horizons = list(RETURN_HORIZONS.keys())
 
@@ -356,7 +357,7 @@ def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
     # =========================================================================
     # Figure setup
     # =========================================================================
-    fig = plt.figure(figsize=(14, 9.5), facecolor="white")
+    fig = plt.figure(figsize=(14, 10.5), facecolor="white")
 
     gs = fig.add_gridspec(
         2, 2,
@@ -413,6 +414,7 @@ def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
         "EW (HL = 1Y)": "EW 1Y",
         "EW (HL = 2Y)": "EW 2Y",
         "EW (HL = 5Y)": "EW 5Y",
+        "EW (HL = 8Y)": "EW 8Y",
     }
 
     y_positions = []
@@ -543,6 +545,7 @@ def print_results_table(results):
         "EW (HL = 1Y)",
         "EW (HL = 2Y)",
         "EW (HL = 5Y)",
+        "EW (HL = 8Y)",
     ]
     horizons = list(RETURN_HORIZONS.keys())
 
