@@ -53,7 +53,6 @@ RETURN_HORIZONS = {
     "Daily": 1,
     "Weekly": 5,
     "Monthly": 21,
-    "Quarterly": 63,
 }
 
 # Half-lives for exponential weighting (in years)
@@ -305,10 +304,8 @@ def estimate_all_betas(cellnex_prices, msci_prices):
             window = 504   # ~2 years of trading days
         elif horizon_days == 5:
             window = 104   # ~2 years of weeks
-        elif horizon_days == 21:
-            window = 24    # ~2 years of months
         else:
-            window = 8     # ~2 years of quarters
+            window = 24    # ~2 years of months
         beta = ols_beta_window(stock_ret, index_ret, window)
         results[("OLS (2-Year Window)", horizon_name)] = beta
 
@@ -318,10 +315,8 @@ def estimate_all_betas(cellnex_prices, msci_prices):
                 hl_periods = hl_years * 252
             elif horizon_days == 5:
                 hl_periods = hl_years * 52
-            elif horizon_days == 21:
-                hl_periods = hl_years * 12
             else:
-                hl_periods = hl_years * 4
+                hl_periods = hl_years * 12
 
             beta = ew_beta(stock_ret, index_ret, hl_periods)
             results[(f"EW (HL = {hl_years}Y)", horizon_name)] = beta
@@ -491,9 +486,202 @@ def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
     # Save
     # =========================================================================
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = OUTPUT_DIR / "cellnex_equity_beta.png"
+    output_path = OUTPUT_DIR / "cellnex_equity_beta_heatmap.png"
     fig.savefig(output_path, dpi=200, bbox_inches="tight", facecolor="white")
-    print(f"\n  Chart saved to: {output_path}")
+    print(f"\n  Heatmap chart saved to: {output_path}")
+    plt.close(fig)
+
+    return output_path
+
+
+def create_boxplot_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
+                         is_sample_data=False):
+    """Create a box plot chart comparing beta distributions by return horizon."""
+
+    methodologies = [
+        "OLS (Full Sample)",
+        "OLS (2-Year Window)",
+        "EW (HL = 1Y)",
+        "EW (HL = 2Y)",
+        "EW (HL = 5Y)",
+        "EW (HL = 8Y)",
+    ]
+    horizons = list(RETURN_HORIZONS.keys())
+
+    # Collect betas by horizon
+    betas_by_horizon = {}
+    for horizon in horizons:
+        vals = [results.get((m, horizon), np.nan) for m in methodologies]
+        betas_by_horizon[horizon] = [v for v in vals if not np.isnan(v)]
+
+    all_betas = [v for v in results.values() if not np.isnan(v)]
+    mean_beta = np.mean(all_betas)
+    median_beta = np.median(all_betas)
+    min_beta = np.min(all_betas)
+    max_beta = np.max(all_betas)
+
+    data_start = max(cellnex_prices.index[0], msci_prices.index[0]).strftime("%b %Y")
+    data_end = min(cellnex_prices.index[-1], msci_prices.index[-1]).strftime("%b %Y")
+
+    horizon_colors = {
+        "Daily": "#1565C0",
+        "Weekly": "#E65100",
+        "Monthly": "#2E7D32",
+    }
+
+    # =========================================================================
+    # Figure layout
+    # =========================================================================
+    fig = plt.figure(figsize=(10, 8), facecolor="white")
+
+    gs = fig.add_gridspec(
+        3, 1,
+        height_ratios=[1.0, 5, 0.5],
+        hspace=0.18,
+        left=0.10, right=0.92,
+        top=0.88, bottom=0.04,
+    )
+    ax_stats = fig.add_subplot(gs[0])
+    ax_box = fig.add_subplot(gs[1])
+    ax_footer = fig.add_subplot(gs[2])
+
+    # =========================================================================
+    # Title
+    # =========================================================================
+    title = "Cellnex (CLNX) Equity Beta to MSCI Europe"
+    subtitle = f"Data: {data_start} \u2013 {data_end}  |  Index: {msci_proxy_label}"
+    if is_sample_data:
+        subtitle += "  [Sample Data]"
+    fig.suptitle(title, fontsize=16, fontweight="bold", y=0.97, color="#212121")
+    fig.text(0.5, 0.925, subtitle, ha="center", fontsize=10, color="#616161")
+
+    # =========================================================================
+    # Panel 1: Key Statistics
+    # =========================================================================
+    ax_stats.axis("off")
+
+    stat_items = [
+        ("Median Beta", f"{median_beta:.2f}", "#1565C0"),
+        ("Mean Beta", f"{mean_beta:.2f}", "#2E7D32"),
+        ("Range", f"{min_beta:.2f} \u2013 {max_beta:.2f}", "#E65100"),
+    ]
+    n_stats = len(stat_items)
+    box_width = 0.22
+    gap = (1.0 - n_stats * box_width) / (n_stats + 1)
+
+    for idx, (label, value, color) in enumerate(stat_items):
+        x_left = gap + idx * (box_width + gap)
+        box = FancyBboxPatch(
+            (x_left, 0.05), box_width, 0.90,
+            boxstyle="round,pad=0.02",
+            facecolor=color, edgecolor="none", alpha=0.12,
+            transform=ax_stats.transAxes,
+        )
+        ax_stats.add_patch(box)
+        ax_stats.text(
+            x_left + box_width / 2, 0.58, value,
+            transform=ax_stats.transAxes, ha="center", va="center",
+            fontsize=20, fontweight="bold", color=color,
+        )
+        ax_stats.text(
+            x_left + box_width / 2, 0.18, label,
+            transform=ax_stats.transAxes, ha="center", va="center",
+            fontsize=9, color="#616161",
+        )
+
+    # =========================================================================
+    # Panel 2: Box Plot
+    # =========================================================================
+    positions = list(range(1, len(horizons) + 1))
+    data_lists = [betas_by_horizon[h] for h in horizons]
+    color_list = [horizon_colors[h] for h in horizons]
+
+    bp = ax_box.boxplot(
+        data_lists,
+        positions=positions,
+        widths=0.45,
+        patch_artist=True,
+        showmeans=True,
+        meanprops=dict(marker="D", markerfacecolor="white", markeredgecolor="#212121",
+                       markersize=7, zorder=5),
+        medianprops=dict(color="white", linewidth=2.5),
+        whiskerprops=dict(color="#757575", linewidth=1.5),
+        capprops=dict(color="#757575", linewidth=1.5),
+        flierprops=dict(marker="o", markerfacecolor="#BDBDBD", markersize=5),
+    )
+
+    for patch, color in zip(bp["boxes"], color_list):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.75)
+        patch.set_edgecolor(color)
+        patch.set_linewidth(1.5)
+
+    # Overlay individual data points (jittered)
+    np.random.seed(0)
+    method_short = ["OLS Full", "OLS 2Y", "EW 1Y", "EW 2Y", "EW 5Y", "EW 8Y"]
+    for i, horizon in enumerate(horizons):
+        vals = betas_by_horizon[horizon]
+        jitter = np.random.uniform(-0.12, 0.12, size=len(vals))
+        x_pts = [positions[i] + j for j in jitter]
+        ax_box.scatter(x_pts, vals, color="white", edgecolors=color_list[i],
+                       s=60, zorder=4, linewidths=1.5)
+        # Label each point with methodology abbreviation
+        for x_pt, val, label in zip(x_pts, vals, method_short):
+            ax_box.annotate(label, (x_pt, val), fontsize=6, color="#424242",
+                            ha="center", va="bottom",
+                            xytext=(0, 6), textcoords="offset points")
+
+    # Overall median line
+    ax_box.axhline(median_beta, color="#C62828", linestyle="--", linewidth=1.5,
+                   alpha=0.7, zorder=1, label=f"Overall median = {median_beta:.2f}")
+
+    ax_box.set_xticks(positions)
+    ax_box.set_xticklabels(horizons, fontsize=12, fontweight="bold")
+    ax_box.set_ylabel("Beta", fontsize=12, fontweight="bold")
+    ax_box.set_xlabel("Return Horizon", fontsize=12, fontweight="bold", labelpad=10)
+    ax_box.grid(axis="y", alpha=0.25, linestyle="-")
+    ax_box.set_axisbelow(True)
+
+    # Y-axis range with some padding
+    y_pad = 0.08
+    ax_box.set_ylim(min_beta - y_pad, max_beta + y_pad)
+
+    # Legend
+    legend_elements = [
+        Line2D([0], [0], marker="s", color="w", markerfacecolor=horizon_colors[h],
+               markersize=10, label=h) for h in horizons
+    ]
+    legend_elements.append(
+        Line2D([0], [0], marker="D", color="w", markerfacecolor="white",
+               markeredgecolor="#212121", markersize=7, label="Mean")
+    )
+    legend_elements.append(
+        Line2D([0], [0], color="#C62828", linestyle="--", linewidth=1.5,
+               label=f"Overall median = {median_beta:.2f}")
+    )
+    ax_box.legend(handles=legend_elements, loc="upper right", fontsize=8.5,
+                  framealpha=0.95, edgecolor="#BDBDBD")
+
+    # =========================================================================
+    # Panel 3: Methodology footer
+    # =========================================================================
+    ax_footer.axis("off")
+    note = (
+        "Each box summarises 6 estimation methods: OLS (full sample & 2-year window) "
+        "and Exponentially Weighted (half-lives of 1, 2, 5, 8 years)   |   "
+        "Box = IQR, whiskers = 1.5\u00d7IQR, white line = median, diamond = mean"
+    )
+    ax_footer.text(0.5, 0.5, note, transform=ax_footer.transAxes,
+                   ha="center", va="center", fontsize=7.5,
+                   color="#9E9E9E", style="italic")
+
+    # =========================================================================
+    # Save
+    # =========================================================================
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = OUTPUT_DIR / "cellnex_equity_beta_boxplot.png"
+    fig.savefig(output_path, dpi=200, bbox_inches="tight", facecolor="white")
+    print(f"  Box plot chart saved to: {output_path}")
     plt.close(fig)
 
     return output_path
@@ -515,11 +703,11 @@ def print_results_table(results):
     ]
     horizons = list(RETURN_HORIZONS.keys())
 
-    print("\n" + "=" * 77)
+    print("\n" + "=" * 65)
     print("  Cellnex Equity Beta Estimates vs MSCI Europe")
-    print("=" * 77)
-    print(f"  {'Methodology':<22} {'Daily':>10} {'Weekly':>10} {'Monthly':>10} {'Quarterly':>10}")
-    print("  " + "-" * 73)
+    print("=" * 65)
+    print(f"  {'Methodology':<22} {'Daily':>10} {'Weekly':>10} {'Monthly':>10}")
+    print("  " + "-" * 61)
 
     for method in methodologies:
         row = f"  {method:<22}"
@@ -531,12 +719,12 @@ def print_results_table(results):
                 row += f"{val:>10.3f}"
         print(row)
 
-    print("  " + "-" * 73)
+    print("  " + "-" * 61)
     all_betas = [v for v in results.values() if not np.isnan(v)]
-    print(f"  {'Mean':>22} {np.mean(all_betas):>40.3f}")
-    print(f"  {'Median':>22} {np.median(all_betas):>40.3f}")
-    print(f"  {'Range':>22} {f'[{np.min(all_betas):.3f} - {np.max(all_betas):.3f}]':>40}")
-    print("=" * 77)
+    print(f"  {'Mean':>22} {np.mean(all_betas):>30.3f}")
+    print(f"  {'Median':>22} {np.median(all_betas):>30.3f}")
+    print(f"  {'Range':>22} {f'[{np.min(all_betas):.3f} - {np.max(all_betas):.3f}]':>30}")
+    print("=" * 65)
 
 
 # =============================================================================
@@ -597,10 +785,14 @@ def main():
     results = estimate_all_betas(cellnex_prices, msci_prices)
     print_results_table(results)
 
-    # Step 3: Create chart
-    print("\n3. Creating chart...")
-    output_path = create_chart(results, msci_label, cellnex_prices, msci_prices,
-                               is_sample_data=is_sample_data)
+    # Step 3: Create charts
+    print("\n3. Creating charts...")
+    chart_args = dict(msci_proxy_label=msci_label,
+                      cellnex_prices=cellnex_prices,
+                      msci_prices=msci_prices,
+                      is_sample_data=is_sample_data)
+    create_chart(results, **chart_args)
+    create_boxplot_chart(results, **chart_args)
 
     print("\nDone.")
     return results
