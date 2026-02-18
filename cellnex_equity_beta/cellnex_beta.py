@@ -53,6 +53,7 @@ RETURN_HORIZONS = {
     "Daily": 1,
     "Weekly": 5,
     "Monthly": 21,
+    "Quarterly": 63,
 }
 
 # Half-lives for exponential weighting (in years)
@@ -304,8 +305,10 @@ def estimate_all_betas(cellnex_prices, msci_prices):
             window = 504   # ~2 years of trading days
         elif horizon_days == 5:
             window = 104   # ~2 years of weeks
-        else:
+        elif horizon_days == 21:
             window = 24    # ~2 years of months
+        else:
+            window = 8     # ~2 years of quarters
         beta = ols_beta_window(stock_ret, index_ret, window)
         results[("OLS (2-Year Window)", horizon_name)] = beta
 
@@ -315,8 +318,10 @@ def estimate_all_betas(cellnex_prices, msci_prices):
                 hl_periods = hl_years * 252
             elif horizon_days == 5:
                 hl_periods = hl_years * 52
-            else:
+            elif horizon_days == 21:
                 hl_periods = hl_years * 12
+            else:
+                hl_periods = hl_years * 4
 
             beta = ew_beta(stock_ret, index_ret, hl_periods)
             results[(f"EW (HL = {hl_years}Y)", horizon_name)] = beta
@@ -330,7 +335,7 @@ def estimate_all_betas(cellnex_prices, msci_prices):
 
 def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
                  is_sample_data=False):
-    """Create a single professional chart for senior management."""
+    """Create a single clean chart designed for senior management."""
 
     methodologies = [
         "OLS (Full Sample)",
@@ -354,29 +359,80 @@ def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
     min_beta = np.min(all_betas)
     max_beta = np.max(all_betas)
 
+    data_start = max(cellnex_prices.index[0], msci_prices.index[0]).strftime("%b %Y")
+    data_end = min(cellnex_prices.index[-1], msci_prices.index[-1]).strftime("%b %Y")
+
     # =========================================================================
-    # Figure setup
+    # Figure: single clean layout
+    #   Row 0: key stats callout boxes  (height_ratio 1.2)
+    #   Row 1: annotated heatmap        (height_ratio 5)
+    #   Row 2: footer / methodology note (height_ratio 0.6)
     # =========================================================================
-    fig = plt.figure(figsize=(14, 10.5), facecolor="white")
+    fig = plt.figure(figsize=(12, 9), facecolor="white")
 
     gs = fig.add_gridspec(
-        2, 2,
-        width_ratios=[3, 2],
-        height_ratios=[6, 1],
-        hspace=0.12,
-        wspace=0.35,
-        left=0.12, right=0.95,
-        top=0.84, bottom=0.08,
+        3, 1,
+        height_ratios=[1.2, 5, 0.6],
+        hspace=0.15,
+        left=0.15, right=0.88,
+        top=0.88, bottom=0.04,
     )
-    ax_heat = fig.add_subplot(gs[0, 0])
-    ax_dots = fig.add_subplot(gs[0, 1])
-    ax_summary = fig.add_subplot(gs[1, :])
+    ax_stats = fig.add_subplot(gs[0])
+    ax_heat = fig.add_subplot(gs[1])
+    ax_footer = fig.add_subplot(gs[2])
 
     # =========================================================================
-    # Panel 1: Annotated Heatmap
+    # Title
     # =========================================================================
-    vmin = max(0, min_beta - 0.15)
-    vmax = max_beta + 0.15
+    title = "Cellnex (CLNX) Equity Beta to MSCI Europe"
+    subtitle = f"Data: {data_start} \u2013 {data_end}  |  Index: {msci_proxy_label}"
+    if is_sample_data:
+        subtitle += "  [Sample Data]"
+    fig.suptitle(title, fontsize=16, fontweight="bold", y=0.97, color="#212121")
+    fig.text(0.5, 0.925, subtitle, ha="center", fontsize=10, color="#616161")
+
+    # =========================================================================
+    # Panel 1: Key Statistics (callout boxes)
+    # =========================================================================
+    ax_stats.axis("off")
+
+    stat_items = [
+        ("Median Beta", f"{median_beta:.2f}", "#1565C0"),
+        ("Mean Beta", f"{mean_beta:.2f}", "#2E7D32"),
+        ("Range", f"{min_beta:.2f} \u2013 {max_beta:.2f}", "#E65100"),
+        ("# Estimates", f"{len(all_betas)}", "#6A1B9A"),
+    ]
+    n_stats = len(stat_items)
+    box_width = 0.20
+    gap = (1.0 - n_stats * box_width) / (n_stats + 1)
+
+    for idx, (label, value, color) in enumerate(stat_items):
+        x_left = gap + idx * (box_width + gap)
+        box = FancyBboxPatch(
+            (x_left, 0.05), box_width, 0.90,
+            boxstyle="round,pad=0.02",
+            facecolor=color, edgecolor="none", alpha=0.12,
+            transform=ax_stats.transAxes,
+        )
+        ax_stats.add_patch(box)
+        # Value (large)
+        ax_stats.text(
+            x_left + box_width / 2, 0.58, value,
+            transform=ax_stats.transAxes, ha="center", va="center",
+            fontsize=20, fontweight="bold", color=color,
+        )
+        # Label (small, below)
+        ax_stats.text(
+            x_left + box_width / 2, 0.18, label,
+            transform=ax_stats.transAxes, ha="center", va="center",
+            fontsize=9, color="#616161",
+        )
+
+    # =========================================================================
+    # Panel 2: Annotated Heatmap (main content)
+    # =========================================================================
+    vmin = max(0, min_beta - 0.12)
+    vmax = max_beta + 0.12
     cmap = plt.cm.YlOrRd
 
     im = ax_heat.imshow(matrix, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
@@ -389,141 +445,51 @@ def create_chart(results, msci_proxy_label, cellnex_prices, msci_prices,
             else:
                 text = f"{val:.2f}"
             norm_val = (val - vmin) / (vmax - vmin) if not np.isnan(val) else 0.5
-            text_color = "white" if norm_val > 0.65 else "black"
+            text_color = "white" if norm_val > 0.6 else "#212121"
             ax_heat.text(j, i, text, ha="center", va="center",
-                         fontsize=14, fontweight="bold", color=text_color)
+                         fontsize=15, fontweight="bold", color=text_color)
 
     ax_heat.set_xticks(range(len(horizons)))
     ax_heat.set_xticklabels(horizons, fontsize=11, fontweight="bold")
     ax_heat.set_yticks(range(len(methodologies)))
-    ax_heat.set_yticklabels(methodologies, fontsize=10)
-    ax_heat.set_xlabel("Return Horizon", fontsize=11, fontweight="bold", labelpad=10)
-    ax_heat.set_title("Beta Estimates by Method & Horizon", fontsize=12,
-                       fontweight="bold", pad=10)
-
-    cbar = fig.colorbar(im, ax=ax_heat, shrink=0.8, pad=0.03)
-    cbar.set_label("Beta", fontsize=10)
-
-    # =========================================================================
-    # Panel 2: Dot Plot (distribution of all estimates)
-    # =========================================================================
-    horizon_colors = {"Daily": "#1565C0", "Weekly": "#E65100", "Monthly": "#2E7D32"}
-    method_short = {
-        "OLS (Full Sample)": "OLS Full",
-        "OLS (2-Year Window)": "OLS 2Y",
-        "EW (HL = 1Y)": "EW 1Y",
-        "EW (HL = 2Y)": "EW 2Y",
-        "EW (HL = 5Y)": "EW 5Y",
-        "EW (HL = 8Y)": "EW 8Y",
-    }
-
-    y_positions = []
-    x_values = []
-    colors = []
-    y_counter = 0
-
-    for method in methodologies:
-        for horizon in horizons:
-            val = results.get((method, horizon), np.nan)
-            if not np.isnan(val):
-                y_positions.append(y_counter)
-                x_values.append(val)
-                colors.append(horizon_colors[horizon])
-            y_counter += 1
-        y_counter += 0.5
-
-    ax_dots.scatter(x_values, y_positions, c=colors, s=110, zorder=5,
-                    edgecolors="white", linewidths=1.5)
-
-    # Median & mean lines
-    ax_dots.axvline(median_beta, color="#C62828", linestyle="--", linewidth=2.0,
-                    alpha=0.85, zorder=3)
-    ax_dots.axvline(mean_beta, color="#6A1B9A", linestyle=":", linewidth=2.0,
-                    alpha=0.85, zorder=3)
-
-    # Y-axis labels
-    y_counter = 0
-    ytick_positions = []
-    ytick_labels = []
-    for method in methodologies:
-        mid = y_counter + 1
-        ytick_positions.append(mid)
-        ytick_labels.append(method_short[method])
-        y_counter += len(horizons) + 0.5
-
-    ax_dots.set_yticks(ytick_positions)
-    ax_dots.set_yticklabels(ytick_labels, fontsize=9)
-    ax_dots.invert_yaxis()
-    ax_dots.set_xlabel("Beta", fontsize=11, fontweight="bold", labelpad=10)
-    ax_dots.set_title("Distribution of Estimates", fontsize=12,
-                       fontweight="bold", pad=10)
-    ax_dots.grid(axis="x", alpha=0.3, linestyle="-")
-
-    # Legend
-    legend_elements = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=horizon_colors[h],
-               markersize=9, label=h) for h in horizons
+    method_labels = [
+        "OLS  (full sample)",
+        "OLS  (2-year window)",
+        "Exp. Weighted  (HL = 1 yr)",
+        "Exp. Weighted  (HL = 2 yr)",
+        "Exp. Weighted  (HL = 5 yr)",
+        "Exp. Weighted  (HL = 8 yr)",
     ]
-    legend_elements.append(
-        Line2D([0], [0], color="#C62828", linestyle="--", linewidth=2,
-               label=f"Median = {median_beta:.2f}")
-    )
-    legend_elements.append(
-        Line2D([0], [0], color="#6A1B9A", linestyle=":", linewidth=2,
-               label=f"Mean = {mean_beta:.2f}")
-    )
-    ax_dots.legend(handles=legend_elements, loc="lower right", fontsize=8,
-                   framealpha=0.9, edgecolor="gray")
+    ax_heat.set_yticklabels(method_labels, fontsize=10)
+    ax_heat.set_xlabel("Return Horizon", fontsize=11, fontweight="bold", labelpad=12)
+
+    # Light grid between cells
+    for i in range(len(methodologies) + 1):
+        ax_heat.axhline(i - 0.5, color="white", linewidth=2)
+    for j in range(len(horizons) + 1):
+        ax_heat.axvline(j - 0.5, color="white", linewidth=2)
+
+    cbar = fig.colorbar(im, ax=ax_heat, shrink=0.85, pad=0.03)
+    cbar.set_label("Beta", fontsize=10, fontweight="bold")
+    cbar.ax.tick_params(labelsize=9)
 
     # =========================================================================
-    # Panel 3: Summary bar
+    # Panel 3: Methodology footer
     # =========================================================================
-    ax_summary.axis("off")
-    data_start = max(cellnex_prices.index[0], msci_prices.index[0]).strftime("%b %Y")
-    data_end = min(cellnex_prices.index[-1], msci_prices.index[-1]).strftime("%b %Y")
-
-    summary_text = (
-        f"Summary  |  "
-        f"Mean Beta: {mean_beta:.2f}  |  "
-        f"Median Beta: {median_beta:.2f}  |  "
-        f"Range: [{min_beta:.2f} \u2013 {max_beta:.2f}]  |  "
-        f"Data: {data_start} to {data_end}  |  "
-        f"Index: {msci_proxy_label}"
-    )
-
-    bbox = FancyBboxPatch(
-        (0.01, 0.1), 0.98, 0.8,
-        boxstyle="round,pad=0.01",
-        facecolor="#F5F5F5", edgecolor="#BDBDBD", linewidth=1,
-        transform=ax_summary.transAxes,
-    )
-    ax_summary.add_patch(bbox)
-    ax_summary.text(0.5, 0.5, summary_text, transform=ax_summary.transAxes,
-                    ha="center", va="center", fontsize=10, fontweight="bold",
-                    color="#424242")
-
-    # =========================================================================
-    # Title
-    # =========================================================================
-    title = "Cellnex (CLNX) Equity Beta to MSCI Europe"
-    subtitle = "Multi-Method Estimation for Triangulation"
-    if is_sample_data:
-        subtitle += "  [Sample Data -- replace with live data for production]"
-
-    fig.suptitle(f"{title}\n{subtitle}", fontsize=14, fontweight="bold", y=0.96)
-
-    # =========================================================================
-    # Methodology note
-    # =========================================================================
+    ax_footer.axis("off")
     note = (
-        "OLS = Ordinary Least Squares regression  |  "
-        "EW = Exponentially Weighted (half-life controls decay of older observations)  |  "
-        "2Y Window = most recent 2 years only"
+        "OLS = Ordinary Least Squares regression   |   "
+        "Exp. Weighted = Exponentially Weighted regression "
+        "(half-life controls decay of older observations)   |   "
+        "2-year window = most recent 2 years only"
     )
-    fig.text(0.5, 0.02, note, ha="center", va="center", fontsize=7.5,
-             color="#757575", style="italic")
+    ax_footer.text(0.5, 0.5, note, transform=ax_footer.transAxes,
+                   ha="center", va="center", fontsize=7.5,
+                   color="#9E9E9E", style="italic")
 
+    # =========================================================================
     # Save
+    # =========================================================================
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = OUTPUT_DIR / "cellnex_equity_beta.png"
     fig.savefig(output_path, dpi=200, bbox_inches="tight", facecolor="white")
@@ -549,11 +515,11 @@ def print_results_table(results):
     ]
     horizons = list(RETURN_HORIZONS.keys())
 
-    print("\n" + "=" * 65)
+    print("\n" + "=" * 77)
     print("  Cellnex Equity Beta Estimates vs MSCI Europe")
-    print("=" * 65)
-    print(f"  {'Methodology':<22} {'Daily':>10} {'Weekly':>10} {'Monthly':>10}")
-    print("  " + "-" * 61)
+    print("=" * 77)
+    print(f"  {'Methodology':<22} {'Daily':>10} {'Weekly':>10} {'Monthly':>10} {'Quarterly':>10}")
+    print("  " + "-" * 73)
 
     for method in methodologies:
         row = f"  {method:<22}"
@@ -565,12 +531,12 @@ def print_results_table(results):
                 row += f"{val:>10.3f}"
         print(row)
 
-    print("  " + "-" * 61)
+    print("  " + "-" * 73)
     all_betas = [v for v in results.values() if not np.isnan(v)]
-    print(f"  {'Mean':>22} {np.mean(all_betas):>30.3f}")
-    print(f"  {'Median':>22} {np.median(all_betas):>30.3f}")
-    print(f"  {'Range':>22} {f'[{np.min(all_betas):.3f} - {np.max(all_betas):.3f}]':>30}")
-    print("=" * 65)
+    print(f"  {'Mean':>22} {np.mean(all_betas):>40.3f}")
+    print(f"  {'Median':>22} {np.median(all_betas):>40.3f}")
+    print(f"  {'Range':>22} {f'[{np.min(all_betas):.3f} - {np.max(all_betas):.3f}]':>40}")
+    print("=" * 77)
 
 
 # =============================================================================
